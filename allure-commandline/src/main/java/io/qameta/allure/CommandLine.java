@@ -27,8 +27,14 @@ import org.slf4j.LoggerFactory;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.FileSystemNotFoundException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.ProviderNotFoundException;
+import java.security.CodeSource;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -42,10 +48,6 @@ import java.util.logging.StreamHandler;
 /**
  * @author eroshenkoam Artem Eroshenko
  */
-@SuppressWarnings({
-        "DeclarationOrder",
-        "ClassDataAbstractionCoupling"
-})
 public class CommandLine {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CommandLine.class);
@@ -55,6 +57,10 @@ public class CommandLine {
     protected static final String GENERATE_COMMAND = "generate";
     protected static final String OPEN_COMMAND = "open";
     protected static final String PLUGIN_COMMAND = "plugin";
+    private static final String CONFIG_DIRECTORY = "config";
+    private static final String PLUGINS_DIRECTORY = "plugins";
+    private static final String DEFAULT_CONFIG_FILE_NAME = "allure.yml";
+    private static final String LIB_DIRECTORY = "lib";
 
     private final MainCommand mainCommand;
     private final ServeCommand serveCommand;
@@ -84,21 +90,76 @@ public class CommandLine {
     }
 
     public static void main(final String[] args) throws InterruptedException {
-        final String allureHome = System.getenv("APP_HOME");
-        final CommandLine commandLine;
-        if (Objects.isNull(allureHome)) {
-            commandLine = new CommandLine((Path) null);
-            LOGGER.info("APP_HOME is not set, using default configuration");
-        } else {
-            commandLine = new CommandLine(Paths.get(allureHome));
+        final Optional<Path> allureHome = resolveAllureHome(System.getenv("APP_HOME"));
+        if (!allureHome.isPresent()) {
+            LOGGER.info("Allure home is not set, using default configuration");
         }
+        final CommandLine commandLine = new CommandLine(allureHome.orElse(null));
         final ExitCode exitCode = commandLine
                 .parse(args)
                 .orElseGet(commandLine::run);
         System.exit(exitCode.getCode());
     }
 
-    @SuppressWarnings({"ReturnCount"})
+    static Optional<Path> resolveAllureHome(final String allureHome, final URI codeSource) {
+        if (Objects.nonNull(allureHome)) {
+            return Optional.of(Paths.get(allureHome));
+        }
+        return inferAllureHome(codeSource);
+    }
+
+    private static Optional<Path> resolveAllureHome(final String allureHome) {
+        if (Objects.nonNull(allureHome)) {
+            return Optional.of(Paths.get(allureHome));
+        }
+        return getCodeSource()
+                .flatMap(CommandLine::inferAllureHome);
+    }
+
+    private static Optional<URI> getCodeSource() {
+        try {
+            return Optional.ofNullable(CommandLine.class.getProtectionDomain().getCodeSource())
+                    .map(CodeSource::getLocation)
+                    .map(location -> {
+                        try {
+                            return location.toURI();
+                        } catch (URISyntaxException e) {
+                            LOGGER.debug("Could not resolve commandline location", e);
+                            return null;
+                        }
+                    });
+        } catch (SecurityException e) {
+            LOGGER.debug("Could not access commandline location", e);
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Path> inferAllureHome(final URI codeSource) {
+        try {
+            final Path location = Paths.get(codeSource).toAbsolutePath().normalize();
+            final Path lib = Files.isDirectory(location) ? location : location.getParent();
+            if (Objects.isNull(lib)
+                    || Objects.isNull(lib.getFileName())
+                    || !LIB_DIRECTORY.equals(lib.getFileName().toString())) {
+                return Optional.empty();
+            }
+            final Path home = lib.getParent();
+            return isAllureHome(home)
+                    ? Optional.of(home)
+                    : Optional.empty();
+        } catch (IllegalArgumentException | FileSystemNotFoundException | ProviderNotFoundException
+                | SecurityException e) {
+            LOGGER.debug("Could not infer Allure home from commandline location {}", codeSource, e);
+            return Optional.empty();
+        }
+    }
+
+    private static boolean isAllureHome(final Path home) {
+        return Objects.nonNull(home)
+                && Files.isRegularFile(home.resolve(CONFIG_DIRECTORY).resolve(DEFAULT_CONFIG_FILE_NAME))
+                && Files.isDirectory(home.resolve(PLUGINS_DIRECTORY));
+    }
+
     public Optional<ExitCode> parse(final String... args) {
         if (args.length == 0) {
             printUsage(commander);
@@ -123,12 +184,7 @@ public class CommandLine {
         return Optional.empty();
     }
 
-    @SuppressWarnings({
-            "CyclomaticComplexity",
-            "NPathComplexity",
-            "ReturnCount",
-            "PMD.SystemPrintln",
-    })
+    @SuppressWarnings("PMD.SystemPrintln")
     public ExitCode run() {
         final java.util.logging.Logger rootLogger = initRootLogger();
         if (mainCommand.getVerboseOptions().isQuiet()) {

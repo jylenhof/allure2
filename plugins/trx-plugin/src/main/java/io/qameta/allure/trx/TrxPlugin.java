@@ -209,7 +209,7 @@ public class TrxPlugin implements Reader {
             result.setParameters(unitTest.getParameters());
             result.setDescription(unitTest.getDescription());
             result.setFullName(fullName);
-            result.setHistoryId(fullName);
+            result.setLegacyHistoryId(fullName);
             result.addLabelIfNotExists(SUITE, className);
             result.addLabelIfNotExists(TEST_CLASS, className);
             result.addLabelIfNotExists(PACKAGE, className);
@@ -219,12 +219,12 @@ public class TrxPlugin implements Reader {
         visitor.visitTestResult(result);
 
         unitTestResult.getFirst(UNIT_TEST_INNER_RESULTS)
-            .ifPresent(innerResults -> {
-                innerResults.get(UNIT_TEST_RESULT_ELEMENT_NAME)
-                    .forEach(unitTestChildResult ->
-                        parseUnitTestResult(unitTestChildResult, tests, context, visitor, result.getLabels())
-                    );
-            });
+                .ifPresent(innerResults -> {
+                    innerResults.get(UNIT_TEST_RESULT_ELEMENT_NAME)
+                            .forEach(
+                                    unitTestChildResult -> parseUnitTestResult(unitTestChildResult, tests, context, visitor, result.getLabels())
+                            );
+                });
     }
 
     protected void parseUnitTestResult(final XmlElement unitTestResult,
@@ -259,12 +259,12 @@ public class TrxPlugin implements Reader {
 
         visitor.visitTestResult(result);
         unitTestResult.getFirst(UNIT_TEST_INNER_RESULTS)
-            .ifPresent(innerResults -> {
-                innerResults.get(UNIT_TEST_RESULT_ELEMENT_NAME)
-                    .forEach(unitTestChildResult ->
-                        parseUnitTestResult(unitTestChildResult, tests, context, visitor, result.getLabels())
-                    );
-            });
+                .ifPresent(innerResults -> {
+                    innerResults.get(UNIT_TEST_RESULT_ELEMENT_NAME)
+                            .forEach(
+                                    unitTestChildResult -> parseUnitTestResult(unitTestChildResult, tests, context, visitor, result.getLabels())
+                            );
+                });
     }
 
     private List<String> splitLines(final String str) {

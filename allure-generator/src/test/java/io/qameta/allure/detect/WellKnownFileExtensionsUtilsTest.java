@@ -15,6 +15,8 @@
  */
 package io.qameta.allure.detect;
 
+import io.qameta.allure.Allure;
+import io.qameta.allure.Description;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -35,6 +37,8 @@ class WellKnownFileExtensionsUtilsTest {
                 Arguments.of("C://System Files x86/custom folder/sample.png", "image/png"),
                 Arguments.of("/sample.tiff", "image/tiff"),
                 Arguments.of("http://examplle.org/sample.jpeg", "image/jpeg"),
+                Arguments.of("screen-diff.imagediff", "application/vnd.allure.image.diff"),
+                Arguments.of("api-call.httpexchange", "application/vnd.allure.http+json"),
                 Arguments.of("tar.gz.svg", "image/svg+xml"),
                 Arguments.of("archive.tar.gz", "application/gzip"),
                 Arguments.of("", null),
@@ -42,10 +46,19 @@ class WellKnownFileExtensionsUtilsTest {
         );
     }
 
+    /**
+     * Verifies detecting content type for extension-based content detection.
+     */
+    @Description
     @ParameterizedTest
     @MethodSource("expectedContentTypes")
     void shouldDetectContentType(final String resourceName, final String expectedContentType) {
-        final String detectedContentType = WellKnownFileExtensionsUtils.lookup(resourceName);
+        Allure.parameter("resourceName", resourceName);
+        Allure.parameter("expectedContentType", expectedContentType);
+        final String detectedContentType = Allure.step(
+                "Resolve content type from file name",
+                () -> WellKnownFileExtensionsUtils.lookup(resourceName)
+        );
 
         assertThat(detectedContentType)
                 .isEqualTo(expectedContentType);
@@ -59,6 +72,9 @@ class WellKnownFileExtensionsUtilsTest {
                 Arguments.of("image/tiff", "tiff"),
                 Arguments.of("image/svg+xml", "svg"),
                 Arguments.of("application/gzip", "tgz"),
+                Arguments.of("application/vnd.allure.image.diff", "imagediff"),
+                Arguments.of("application/vnd.allure.http+json", "httpexchange"),
+                Arguments.of("application/vnd.allure.http", "httpexchange"),
                 Arguments.of("text/plain", "txt"),
                 Arguments.of("application/octet-stream", ""),
                 Arguments.of("", ""),
@@ -66,10 +82,19 @@ class WellKnownFileExtensionsUtilsTest {
         );
     }
 
+    /**
+     * Verifies returning extension by content type for extension-based content detection.
+     */
+    @Description
     @ParameterizedTest
     @MethodSource("expectedExtensions")
     void shouldReturnExtensionByContentType(final String contentType, final String expectedExtension) {
-        final String detectedContentType = WellKnownFileExtensionsUtils.getExtensionByMimeType(contentType);
+        Allure.parameter("contentType", contentType);
+        Allure.parameter("expectedExtension", expectedExtension);
+        final String detectedContentType = Allure.step(
+                "Resolve file extension from content type",
+                () -> WellKnownFileExtensionsUtils.getExtensionByMimeType(contentType)
+        );
 
         assertThat(detectedContentType)
                 .isEqualTo(expectedExtension);

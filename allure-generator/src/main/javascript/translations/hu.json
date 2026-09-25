@@ -11,7 +11,8 @@
       "name": "Státusz"
     },
     "trend": {
-      "empty": "Üres"
+      "empty": "Üres",
+      "reportLink": "{{name}} jelentés megnyitása"
     }
   },
   "component": {
@@ -31,12 +32,13 @@
       "filtered": {
         "shown": "{{count}} mutatva",
         "total": "{{count}} teszt eredmény",
-        "total_plural": "{{count}} tesztek eredménye"
+        "total_one": "{{count}} teszt eredmény",
+        "total_other": "{{count}} tesztek eredménye"
       },
       "groups": "Csoportok extra információ",
       "time": {
         "max": {
-          "name": "Max",
+          "name": "Maximum",
           "tooltip": "Leghosszabb ideig futó teszt"
         },
         "sum": {
@@ -48,12 +50,29 @@
           "tooltip": "Az első teszt kezdésétől az utolsó teszt befejeztéig eltelt idő."
         }
       },
-      "unknown": "<Üres>"
+      "unknown": "<Üres>",
+      "noItemSelected": "Nincs kijelölt elem",
+      "search": "Teszteredmények keresése"
     },
     "widgetStatus": {
       "showAll": "Összes mutatása",
       "total": "{{count}} elem",
-      "total_plural": "{{count}} összesen elem"
+      "total_one": "{{count}} elem",
+      "total_other": "{{count}} összesen elem"
+    },
+    "attachment": {
+      "download": "Kattints a csatolmány letöltéséhez",
+      "videoNotSupported": "A böngésződ nem támogatja a video taget",
+      "htmlPreviewTitle": "HTML csatolmány előnézete: {{name}}",
+      "previewSizeExceeded": "A melléklet előnézete le van tiltva, mert a melléklet nagyobb, mint {{size}}.",
+      "htmlPreviewSizeExceeded": "A HTML előnézet le van tiltva, mert a melléklet nagyobb, mint {{size}}.",
+      "htmlPreviewInvalid": "A HTML előnézet le van tiltva, mert a melléklet nem tűnik HTML-nek."
+    },
+    "screenDiff": {
+      "empty": "Nincs megadva eltérésadat",
+      "name": "Képernyőkülönbség",
+      "showDiff": "Eltérés megjelenítése",
+      "showOverlay": "Átfedés megjelenítése"
     }
   },
   "controls": {
@@ -64,11 +83,19 @@
     "collapse": "Bezár",
     "expand": "Kinyit",
     "fullscreen": "Teljes képernyő",
-    "language": "Másik nyelv választása"
+    "language": "Másik nyelv választása",
+    "languageShort": "Nyelv",
+    "lightTheme": "Világos téma",
+    "darkTheme": "Sötét téma",
+    "loading": "Betöltés...",
+    "close": "Bezárás"
   },
   "errors": {
     "missedAttachment": "Nem található csatolmány",
-    "notFound": "Nincs találat"
+    "notFound": "Nincs találat",
+    "loadingFailed": "Nem sikerült betölteni az adatokat",
+    "tabNotFound": "A(z) \"{{tab}}\" lap nem található",
+    "testResultNotFound": "A \"{{uid}}\" uid azonosítójú teszteredmény nem található"
   },
   "marks": {
     "flaky": "Bizonytalan (flaky)",
@@ -76,6 +103,26 @@
     "newFailed": "Új sikertelen",
     "newPassed": "Új sikeres",
     "retriesStatusChange": "Státusz változott ismétlés után"
+  },
+  "run": {
+    "actual": "Actual",
+    "allTestsPassedWithErrors": "All {{tests}} reported tests passed, but this run is unsuccessful. Run errors: {{count}}.",
+    "attachments": "Attachments",
+    "completedWithErrors": "Run completed with errors",
+    "errorCount": "Run errors: {{count}}",
+    "errors": "Errors",
+    "errorsOutsideTests": "Run-level errors outside test results: {{count}}.",
+    "expected": "Expected",
+    "failed": "Run failed",
+    "failedBeforeTests": "Run failed before tests were reported",
+    "failureExplanation": "These errors happened outside test results. Test statistics remain unchanged.",
+    "moreErrors": "and {{count}} additional errors",
+    "noAttachments": "No run-level attachments were reported.",
+    "noErrors": "No run errors",
+    "noErrorsExplanation": "No errors outside test results were reported for this run.",
+    "reviewDetails": "Review run details",
+    "trace": "Trace",
+    "unknownError": "Unknown run error"
   },
   "sorter": {
     "duration": "futásidő",
@@ -94,11 +141,20 @@
     "categories": {
       "name": "Kategóriák"
     },
+    "behaviors": {
+      "name": "Viselkedés"
+    },
     "graph": {
       "name": "Grafikonok"
     },
     "overview": {
       "name": "Összesítő"
+    },
+    "packages": {
+      "name": "Modulok"
+    },
+    "run": {
+      "name": "Run"
     },
     "suites": {
       "name": "Tesztek"
@@ -106,7 +162,9 @@
     "timeline": {
       "name": "Idővonal",
       "selected": "{{count}} darab teszt ({{percent}}%) futásideje {{duration}}",
-      "selected_plural": "{{count}} tesztek ({{percent}}%) futásideje {{duration}}"
+      "selected_one": "{{count}} darab teszt ({{percent}}%) futásideje {{duration}}",
+      "selected_other": "{{count}} tesztek ({{percent}}%) futásideje {{duration}}",
+      "resultLink": "{{name}} teszteredmény megnyitása, státusz: {{status}}"
     }
   },
   "testResult": {
@@ -125,8 +183,9 @@
         "tooltip": "Csatolmány megnyitása új fülön"
       },
       "name": "Futás",
-      "setup": "Megelőző lépések (Set up)",
-      "teardown": "Lezáró lépések (Tear down)"
+      "setup": "Megelőző lépések",
+      "teardown": "Lezáró lépések",
+      "empty": "Nem áll rendelkezésre információ a teszt végrehajtásáról."
     },
     "history": {
       "empty": "Nem érhető el előzmény információ",
@@ -163,11 +222,14 @@
     "stats": {
       "count": {
         "attachments": "{{count}} csatolmány",
-        "attachments_plural": "{{count}} csatolmány",
         "parameters": "{{count}} paraméter",
-        "parameters_plural": "{{count}} paraméterek",
         "steps": "{{count}} köztes lépés",
-        "steps_plural": "{{count}} köztes lépések"
+        "attachments_one": "{{count}} csatolmány",
+        "attachments_other": "{{count}} csatolmány",
+        "parameters_one": "{{count}} paraméter",
+        "parameters_other": "{{count}} paraméterek",
+        "steps_one": "{{count}} köztes lépés",
+        "steps_other": "{{count}} köztes lépések"
       }
     },
     "status": {
@@ -181,6 +243,10 @@
   "widget": {
     "categories": {
       "name": "Kategáróiák"
+    },
+    "behaviors": {
+      "name": "Funkció rendezése sztorinként",
+      "showAll": "összes mutatása"
     },
     "categoriesTrend": {
       "name": "Kategória trend"
@@ -211,12 +277,14 @@
     "summary": {
       "aggregatedName": "Összesített jelentés",
       "launches": "indító",
-      "launches_plural": "indítók",
       "testResults": "teszteset",
-      "testResults_plural": "tesztesetek"
+      "launches_one": "indító",
+      "launches_other": "indítók",
+      "testResults_one": "teszteset",
+      "testResults_other": "tesztesetek"
     },
     "trend": {
-      "name": "Trend"
+      "name": "Tendencia"
     }
   }
 }

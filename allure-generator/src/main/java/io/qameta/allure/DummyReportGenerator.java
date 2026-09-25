@@ -32,6 +32,7 @@ import io.qameta.allure.duration.DurationPlugin;
 import io.qameta.allure.duration.DurationTrendPlugin;
 import io.qameta.allure.environment.Allure1EnvironmentPlugin;
 import io.qameta.allure.executor.ExecutorPlugin;
+import io.qameta.allure.globals.GlobalsPlugin;
 import io.qameta.allure.history.HistoryPlugin;
 import io.qameta.allure.history.HistoryTrendPlugin;
 import io.qameta.allure.idea.IdeaLinksPlugin;
@@ -66,10 +67,6 @@ import java.util.stream.Collectors;
  * @author Artem Eroshenko eroshenkoam@qameta.io
  * Date: 1/22/14
  */
-@SuppressWarnings({
-        "ClassFanOutComplexity",
-        "ClassDataAbstractionCoupling"
-})
 public final class DummyReportGenerator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DummyReportGenerator.class);
@@ -97,6 +94,7 @@ public final class DummyReportGenerator {
             new SuitesPlugin(),
             new TestsResultsPlugin(),
             new AttachmentsPlugin(),
+            new GlobalsPlugin(),
             new MailPlugin(),
             new InfluxDbExportPlugin(),
             new PrometheusExportPlugin(),

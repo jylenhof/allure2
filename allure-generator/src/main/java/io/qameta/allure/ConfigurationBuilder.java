@@ -34,6 +34,7 @@ import io.qameta.allure.duration.DurationTrendPlugin;
 import io.qameta.allure.environment.Allure1EnvironmentPlugin;
 import io.qameta.allure.executor.ExecutorPlugin;
 import io.qameta.allure.ga.GaPlugin;
+import io.qameta.allure.globals.GlobalsPlugin;
 import io.qameta.allure.history.HistoryPlugin;
 import io.qameta.allure.history.HistoryTrendPlugin;
 import io.qameta.allure.idea.IdeaLinksPlugin;
@@ -69,10 +70,6 @@ import java.util.UUID;
  * @see Configuration
  * @since 2.0
  */
-@SuppressWarnings({
-        "ClassDataAbstractionCoupling",
-        "ClassFanOutComplexity"
-})
 public class ConfigurationBuilder {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ConfigurationBuilder.class);
@@ -100,6 +97,7 @@ public class ConfigurationBuilder {
             new SuitesPlugin(),
             new TestsResultsPlugin(),
             new AttachmentsPlugin(),
+            new GlobalsPlugin(),
             new MailPlugin(),
             new InfluxDbExportPlugin(),
             new PrometheusExportPlugin(),
@@ -152,41 +150,44 @@ public class ConfigurationBuilder {
      */
     @Deprecated
     public ConfigurationBuilder useDefault() {
-        return withExtensions(Arrays.asList(
-                new ReportInfoContext(version, uuid),
-                new JacksonContext(),
-                new MarkdownContext(),
-                new FreemarkerContext(),
-                new RandomUidContext(),
-                new MarkdownDescriptionsPlugin(),
-                new TagsPlugin(),
-                new RetryPlugin(),
-                new RetryTrendPlugin(),
-                new SeverityPlugin(),
-                new OwnerPlugin(),
-                new IdeaLinksPlugin(),
-                new HistoryPlugin(),
-                new HistoryTrendPlugin(),
-                new CategoriesPlugin(),
-                new CategoriesTrendPlugin(),
-                new DurationPlugin(),
-                new DurationTrendPlugin(),
-                new StatusChartPlugin(),
-                new TimelinePlugin(),
-                new SuitesPlugin(),
-                new TestsResultsPlugin(),
-                new AttachmentsPlugin(),
-                new MailPlugin(),
-                new InfluxDbExportPlugin(),
-                new PrometheusExportPlugin(),
-                new SummaryPlugin(),
-                new ExecutorPlugin(),
-                new LaunchPlugin(),
-                new Allure1Plugin(),
-                new Allure1EnvironmentPlugin(),
-                new Allure2Plugin(),
-                new GaPlugin()
-        ));
+        return withExtensions(
+                Arrays.asList(
+                        new ReportInfoContext(version, uuid),
+                        new JacksonContext(),
+                        new MarkdownContext(),
+                        new FreemarkerContext(),
+                        new RandomUidContext(),
+                        new MarkdownDescriptionsPlugin(),
+                        new TagsPlugin(),
+                        new RetryPlugin(),
+                        new RetryTrendPlugin(),
+                        new SeverityPlugin(),
+                        new OwnerPlugin(),
+                        new IdeaLinksPlugin(),
+                        new HistoryPlugin(),
+                        new HistoryTrendPlugin(),
+                        new CategoriesPlugin(),
+                        new CategoriesTrendPlugin(),
+                        new DurationPlugin(),
+                        new DurationTrendPlugin(),
+                        new StatusChartPlugin(),
+                        new TimelinePlugin(),
+                        new SuitesPlugin(),
+                        new TestsResultsPlugin(),
+                        new AttachmentsPlugin(),
+                        new GlobalsPlugin(),
+                        new MailPlugin(),
+                        new InfluxDbExportPlugin(),
+                        new PrometheusExportPlugin(),
+                        new SummaryPlugin(),
+                        new ExecutorPlugin(),
+                        new LaunchPlugin(),
+                        new Allure1Plugin(),
+                        new Allure1EnvironmentPlugin(),
+                        new Allure2Plugin(),
+                        new GaPlugin()
+                )
+        );
     }
 
     /**
@@ -207,13 +208,15 @@ public class ConfigurationBuilder {
     public static ConfigurationBuilder empty() {
         final String allureVersion = getVersion();
         return new ConfigurationBuilder(allureVersion)
-                .withExtensions(Arrays.asList(
-                        new ReportInfoContext(allureVersion),
-                        new JacksonContext(),
-                        new MarkdownContext(),
-                        new FreemarkerContext(),
-                        new RandomUidContext()
-                ));
+                .withExtensions(
+                        Arrays.asList(
+                                new ReportInfoContext(allureVersion),
+                                new JacksonContext(),
+                                new MarkdownContext(),
+                                new FreemarkerContext(),
+                                new RandomUidContext()
+                        )
+                );
     }
 
     /**
@@ -325,6 +328,5 @@ public class ConfigurationBuilder {
                 .map(Class::getPackage)
                 .map(Package::getImplementationVersion);
     }
-
 
 }

@@ -35,8 +35,8 @@ public final class TestData {
 
     public static JiraService mockJiraService() {
         final JiraService service = mock(JiraService.class);
-        when(service.createJiraLaunch(any(JiraLaunch.class), anyList())).thenAnswer(invocation ->
-                Arrays.asList(
+        when(service.createJiraLaunch(any(JiraLaunch.class), anyList())).thenAnswer(
+                invocation -> Arrays.asList(
                         new JiraExportResult().setExternalId("ALLURE-1")
                                 .setIssueKey("ALLURE-1")
                                 .setStatus("ok"),
@@ -45,27 +45,28 @@ public final class TestData {
                                 .setStatus("ok")
                 )
         );
-        when(service.createTestResult(any(JiraTestResult.class), anyList())).thenAnswer(i ->
-            Arrays.asList(
-                    new JiraExportResult().setExternalId("ALLURE-1")
-                            .setIssueKey("ALLURE-1")
-                            .setStatus("ok"),
-                    new JiraExportResult().setExternalId("ALLURE-2")
-                            .setIssueKey("ALLURE-2")
-                            .setStatus("ok")
-            ));
+        when(service.createTestResult(any(JiraTestResult.class), anyList())).thenAnswer(
+                i -> Arrays.asList(
+                        new JiraExportResult().setExternalId("ALLURE-1")
+                                .setIssueKey("ALLURE-1")
+                                .setStatus("ok"),
+                        new JiraExportResult().setExternalId("ALLURE-2")
+                                .setIssueKey("ALLURE-2")
+                                .setStatus("ok")
+                )
+        );
         return service;
     }
 
-
-
     public static TestResult createTestResult(final Status status) {
+        final String testCaseHash = RandomStringUtils.insecure().nextAlphanumeric(9);
+        final String parametersHash = RandomStringUtils.insecure().nextAlphanumeric(9);
         return new TestResult()
                 .setUid(RandomStringUtils.insecure().nextAlphanumeric(10))
                 .setName(RandomStringUtils.insecure().nextAlphanumeric(10))
-                .setHistoryId(RandomStringUtils.insecure().nextAlphanumeric(9))
+                .setTestCaseHash(testCaseHash)
+                .setParametersHash(parametersHash)
                 .setStatus(status);
     }
-
 
 }

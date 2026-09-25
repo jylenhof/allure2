@@ -35,11 +35,14 @@ import io.qameta.allure.model.FixtureResult;
 import io.qameta.allure.model.StepResult;
 import io.qameta.allure.model.TestResult;
 import io.qameta.allure.model.TestResultContainer;
+import io.qameta.allure.util.HtmlSanitizerUtils;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -77,17 +80,21 @@ import static java.util.Objects.nonNull;
  *
  * @since 2.0
  */
-@SuppressWarnings({
-        "ClassDataAbstractionCoupling",
-        "ClassFanOutComplexity",
-        "PMD.TooManyMethods",
-})
+@SuppressWarnings(
+    {
+            "PMD.TooManyMethods",
+    }
+)
 public class Allure2Plugin implements Reader {
 
     @SuppressWarnings("WeakerAccess")
     public static final String ALLURE2_RESULTS_FORMAT = "allure2";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Allure2Plugin.class);
+
+    private static final String UNKNOWN_PARAMETER_VALUE = "#___unknown_value___#";
+
+    private static final String TEMPORARY_FILE_SUFFIX = ".tmp";
 
     private static final Pattern ATTACHMENT_SOURCE_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{1,100}$");
 
@@ -96,9 +103,32 @@ public class Allure2Plugin implements Reader {
             nullsLast(comparing(Time::getStart, nullsLast(naturalOrder())))
     );
 
-    private static final Comparator<Parameter> PARAMETER_COMPARATOR =
-            comparing(Parameter::getName, nullsFirst(naturalOrder()))
-                    .thenComparing(Parameter::getValue, nullsFirst(naturalOrder()));
+    private static final Comparator<Parameter> PARAMETER_COMPARATOR = comparing(Parameter::getName, nullsFirst(naturalOrder()))
+            .thenComparing(Parameter::getValue, nullsFirst(naturalOrder()));
+
+    private static final Comparator<String> UTF8_COMPARATOR = (first, second) -> {
+        final byte[] firstBytes = first.getBytes(StandardCharsets.UTF_8);
+        final byte[] secondBytes = second.getBytes(StandardCharsets.UTF_8);
+        final int length = Math.min(firstBytes.length, secondBytes.length);
+        for (int index = 0; index < length; index++) {
+            final int comparison = Integer.compare(
+                    Byte.toUnsignedInt(firstBytes[index]),
+                    Byte.toUnsignedInt(secondBytes[index])
+            );
+            if (comparison != 0) {
+                return comparison;
+            }
+        }
+        return Integer.compare(firstBytes.length, secondBytes.length);
+    };
+
+    private static final Comparator<io.qameta.allure.model.Parameter> RETRY_PARAMETER_COMPARATOR = comparing(
+            io.qameta.allure.model.Parameter::getName,
+            UTF8_COMPARATOR
+    ).thenComparing(
+            parameter -> Objects.toString(parameter.getValue(), UNKNOWN_PARAMETER_VALUE),
+            UTF8_COMPARATOR
+    );
 
     private final ObjectMapper mapper = JsonMapper.builder()
             .enable(MapperFeature.USE_WRAPPER_NAME_AS_PROPERTY_NAME)
@@ -131,12 +161,16 @@ public class Allure2Plugin implements Reader {
         sortByStart(afters);
 
         readTestResults(resultsDirectory)
-                .forEach(result -> convert(
-                        context.getValue(),
-                        resultsDirectory, visitor,
-                        result,
-                        befores, afters
-                ));
+                .forEach(
+                        result -> convert(
+                                context.getValue(),
+                                resultsDirectory, visitor,
+                                result,
+                                befores, afters
+                        )
+                );
+
+        new Allure2GlobalsReader(mapper).readResults(visitor, resultsDirectory);
     }
 
     private static void sortByStart(final Map<String, List<StageResult>> befores) {
@@ -178,20 +212,56 @@ public class Allure2Plugin implements Reader {
                 }));
     }
 
+    static String getTestCaseHash(final TestResult result) {
+        final String identity = getTestCaseIdentity(result);
+        return Optional.ofNullable(identity)
+                .map(value -> DigestUtils.md5Hex(value.getBytes(StandardCharsets.UTF_8)))
+                .orElse(null);
+    }
+
+    static String getParametersHash(final TestResult result) {
+        final Set<io.qameta.allure.model.Parameter> parameters = Optional.ofNullable(result.getParameters())
+                .orElseGet(ArrayList::new)
+                .stream()
+                .filter(Objects::nonNull)
+                .filter(parameter -> nonNull(parameter.getName()))
+                .filter(parameter -> !parameter.getName().isEmpty())
+                .filter(parameter -> !Boolean.TRUE.equals(parameter.getExcluded()))
+                .collect(Collectors.toCollection(() -> new TreeSet<>(RETRY_PARAMETER_COMPARATOR)));
+        final String serializedParameters = parameters.stream()
+                .map(
+                        parameter -> parameter.getName()
+                                + ":"
+                                + Objects.toString(parameter.getValue(), UNKNOWN_PARAMETER_VALUE)
+                )
+                .collect(Collectors.joining(","));
+        return DigestUtils.md5Hex(serializedParameters.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String getTestCaseIdentity(final TestResult result) {
+        return Stream.of(result.getTestCaseId(), result.getFullName())
+                .filter(Objects::nonNull)
+                .filter(value -> !value.isEmpty())
+                .findFirst()
+                .orElse(null);
+    }
+
     private void convert(final Supplier<String> uidGenerator,
                          final Path resultsDirectory,
                          final ResultsVisitor visitor,
                          final TestResult result,
                          final Map<String, List<StageResult>> befores,
                          final Map<String, List<StageResult>> afters) {
-        final io.qameta.allure.entity.TestResult dest = new io.qameta.allure.entity.TestResult();
-        dest.setUid(uidGenerator.get());
-        dest.setHistoryId(result.getHistoryId());
+        final io.qameta.allure.entity.TestResult dest = new io.qameta.allure.entity.TestResult()
+                .setTestCaseHash(getTestCaseHash(result))
+                .setParametersHash(getParametersHash(result))
+                .setLegacyHistoryId(result.getHistoryId())
+                .setUid(uidGenerator.get());
         dest.setFullName(result.getFullName());
         dest.setName(firstNonNull(result.getName(), result.getFullName(), "Unknown test"));
         dest.setTime(Time.create(result.getStart(), result.getStop()));
         dest.setDescription(result.getDescription());
-        dest.setDescriptionHtml(result.getDescriptionHtml());
+        dest.setDescriptionHtml(sanitizeDescriptionHtml(result.getDescriptionHtml()));
         dest.setStatus(convert(result.getStatus()));
         Optional.ofNullable(result.getStatusDetails()).ifPresent(details -> {
             dest.setStatusMessage(details.getMessage());
@@ -232,7 +302,7 @@ public class Allure2Plugin implements Reader {
                 .setStatus(convert(result.getStatus()))
                 .setSteps(convertList(result.getSteps(), step -> convert(source, visitor, step)))
                 .setDescription(result.getDescription())
-                .setDescriptionHtml(result.getDescriptionHtml())
+                .setDescriptionHtml(sanitizeDescriptionHtml(result.getDescriptionHtml()))
                 .setAttachments(convertList(result.getAttachments(), attach -> convert(source, visitor, attach)))
                 .setParameters(convertList(result.getParameters(), p -> !HIDDEN.equals(p.getMode()), this::convert));
         Optional.of(result)
@@ -279,8 +349,9 @@ public class Allure2Plugin implements Reader {
         final Path normalizedSource = source.normalize();
         final Path attachmentFile = normalizedSource.resolve(attachmentSource).normalize();
 
-        if (attachmentFile.startsWith(normalizedSource)
-            && Files.isRegularFile(attachmentFile, LinkOption.NOFOLLOW_LINKS)) {
+        if (!attachmentSource.endsWith(TEMPORARY_FILE_SUFFIX)
+                && attachmentFile.startsWith(normalizedSource)
+                && Files.isRegularFile(attachmentFile, LinkOption.NOFOLLOW_LINKS)) {
             final Attachment found = visitor.visitAttachmentFile(attachmentFile);
             if (nonNull(attachment.getType())) {
                 found.setType(attachment.getType());
@@ -356,17 +427,21 @@ public class Allure2Plugin implements Reader {
                                      final ResultsVisitor visitor,
                                      final TestResult result) {
         final StageResult testStage = new StageResult();
-        testStage.setSteps(convertList(
-                result.getSteps(),
-                step -> convert(source, visitor, step)
-        ));
-        testStage.setAttachments(convertList(
-                result.getAttachments(),
-                attachment -> convert(source, visitor, attachment)
-        ));
+        testStage.setSteps(
+                convertList(
+                        result.getSteps(),
+                        step -> convert(source, visitor, step)
+                )
+        );
+        testStage.setAttachments(
+                convertList(
+                        result.getAttachments(),
+                        attachment -> convert(source, visitor, attachment)
+                )
+        );
         testStage.setStatus(convert(result.getStatus()));
         testStage.setDescription(result.getDescription());
-        testStage.setDescriptionHtml(result.getDescriptionHtml());
+        testStage.setDescriptionHtml(sanitizeDescriptionHtml(result.getDescriptionHtml()));
         Optional.of(result)
                 .map(TestResult::getStatusDetails)
                 .ifPresent(statusDetails -> {
@@ -380,14 +455,20 @@ public class Allure2Plugin implements Reader {
         return !result.getSteps().isEmpty() || !result.getAttachments().isEmpty();
     }
 
+    private String sanitizeDescriptionHtml(final String source) {
+        return HtmlSanitizerUtils.sanitizeHtml(source);
+    }
+
     @SafeVarargs
     private static <T> T firstNonNull(final T... items) {
         return Stream.of(items)
                 .filter(Objects::nonNull)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "firstNonNull method should have at least one non null parameter"
-                ));
+                .orElseThrow(
+                        () -> new IllegalStateException(
+                                "firstNonNull method should have at least one non null parameter"
+                        )
+                );
     }
 
     private Stream<TestResultContainer> readTestResultsContainers(final Path resultsDirectory) {
@@ -428,6 +509,7 @@ public class Allure2Plugin implements Reader {
         try (DirectoryStream<Path> directoryStream = newDirectoryStream(directory, glob)) {
             return StreamSupport.stream(directoryStream.spliterator(), true)
                     .filter(Files::isRegularFile)
+                    .filter(path -> !path.getFileName().toString().endsWith(TEMPORARY_FILE_SUFFIX))
                     .collect(Collectors.toList())
                     .stream();
         } catch (IOException e) {

@@ -41,7 +41,6 @@ public final class JiraExportUtils {
     private JiraExportUtils() {
     }
 
-
     public static JiraLaunch getJiraLaunch(final ExecutorInfo executor,
                                            final List<LaunchStatisticExport> statistic) {
         return new JiraLaunch()
@@ -64,7 +63,7 @@ public final class JiraExportUtils {
             final JiraTestResult jiraTestResult = new JiraTestResult()
                     .setExternalId(testResult.getUid())
                     .setTestCaseId(testResult.getUid())
-                    .setHistoryKey(testResult.getHistoryId())
+                    .setHistoryKey(testResult.getRetryHash())
                     .setName(testResult.getName())
                     .setUrl(getJiraTestResultUrl(executor.getReportUrl(), testResult.getUid()))
                     .setStatus(testResult.getStatus().toString())
@@ -76,7 +75,6 @@ public final class JiraExportUtils {
             return Optional.of(jiraTestResult);
         }
     }
-
 
     public static List<TestResult> getTestResults(final List<LaunchResults> launchesResults) {
         return launchesResults.stream()
@@ -107,13 +105,15 @@ public final class JiraExportUtils {
 
     public static List<LaunchStatisticExport> convertStatistics(final Statistic statistic) {
         return Stream.of(ResultStatus.values()).filter(resultStatus -> statistic.get(resultStatus.statusName()) != 0)
-                .map(resultStatus ->
-                        new LaunchStatisticExport(resultStatus.statusName().value(),
-                                resultStatus.color(), statistic.get(resultStatus.statusName())))
+                .map(
+                        resultStatus -> new LaunchStatisticExport(
+                                resultStatus.statusName().value(),
+                                resultStatus.color(), statistic.get(resultStatus.statusName())
+                        )
+                )
                 .collect(Collectors.toList());
 
     }
-
 
     public static String getJiraTestResultUrl(final String reportUrl, final String uuid) {
         return Optional.ofNullable(reportUrl)
@@ -134,9 +134,12 @@ public final class JiraExportUtils {
         return Stream.of(ResultStatus.values())
                 .filter(resultStatus -> testResult.getStatus() == resultStatus.statusName())
                 .findFirst()
-                .orElseThrow(() ->
-                        new IllegalArgumentException("There is no such status as " + testResult.getStatus()
-                                .value()))
+                .orElseThrow(
+                        () -> new IllegalArgumentException(
+                                "There is no such status as " + testResult.getStatus()
+                                        .value()
+                        )
+                )
                 .color();
     }
 }

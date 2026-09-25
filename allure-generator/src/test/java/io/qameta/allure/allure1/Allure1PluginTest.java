@@ -15,8 +15,10 @@
  */
 package io.qameta.allure.allure1;
 
+import io.qameta.allure.Allure;
 import io.qameta.allure.ConfigurationBuilder;
 import io.qameta.allure.DefaultResultsVisitor;
+import io.qameta.allure.Description;
 import io.qameta.allure.Issue;
 import io.qameta.allure.core.Configuration;
 import io.qameta.allure.core.LaunchResults;
@@ -53,12 +55,17 @@ import java.util.stream.Stream;
 import static io.qameta.allure.entity.Status.FAILED;
 import static io.qameta.allure.entity.Status.PASSED;
 import static io.qameta.allure.entity.Status.UNKNOWN;
+import static io.qameta.allure.testdata.TestData.attachFileContent;
+import static io.qameta.allure.testdata.TestData.attachLaunchResults;
+import static io.qameta.allure.testdata.TestData.toHex;
 import static org.allurefw.allure1.AllureUtils.generateTestSuiteJsonName;
 import static org.allurefw.allure1.AllureUtils.generateTestSuiteXmlName;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 class Allure1PluginTest {
+
+    private static final String TEXT_PLAIN = "text/plain";
 
     private Path directory;
 
@@ -67,6 +74,10 @@ class Allure1PluginTest {
         this.directory = directory;
     }
 
+    /**
+     * Verifies processing empty or null status for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldProcessEmptyOrNullStatus() throws Exception {
         Set<TestResult> testResults = process(
@@ -83,6 +94,10 @@ class Allure1PluginTest {
                 );
     }
 
+    /**
+     * Verifies reading test suite XML for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldReadTestSuiteXml() throws Exception {
         Set<TestResult> testResults = process(
@@ -92,6 +107,28 @@ class Allure1PluginTest {
                 .hasSize(4);
     }
 
+    /**
+     * Verifies sanitizing description HTML for Allure 1 parsing.
+     */
+    @Description
+    @Test
+    void shouldSanitizeDescriptionHtml() throws Exception {
+        final Set<TestResult> testResults = process(
+                "allure1/description-html-xss.xml", generateTestSuiteXmlName()
+        ).getResults();
+
+        assertThat(testResults).hasSize(1);
+        final String descriptionHtml = testResults.iterator().next().getDescriptionHtml();
+        assertThat(descriptionHtml)
+                .contains("<p>safe</p>")
+                .doesNotContain("<script")
+                .doesNotContain("alert(");
+    }
+
+    /**
+     * Verifies excluding duplicated parameters for Allure 1 parsing.
+     */
+    @Description
     @SuppressWarnings("unchecked")
     @Test
     void shouldExcludeDuplicatedParams() throws Exception {
@@ -111,6 +148,10 @@ class Allure1PluginTest {
                 );
     }
 
+    /**
+     * Verifies reading test suite JSON for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldReadTestSuiteJson() throws Exception {
         Set<TestResult> testResults = process(
@@ -120,6 +161,10 @@ class Allure1PluginTest {
                 .hasSize(1);
     }
 
+    /**
+     * Verifies reading attachments for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldReadAttachments() throws Exception {
         final LaunchResults launchResults = process(
@@ -164,6 +209,10 @@ class Allure1PluginTest {
         return Stream.concat(fromSteps, fromAttachments);
     }
 
+    /**
+     * Verifies that a missing results directory does not fail parsing.
+     */
+    @Description
     @Test
     void shouldNotFailIfNoResultsDirectory() throws Exception {
         Set<TestResult> testResults = process().getResults();
@@ -171,6 +220,10 @@ class Allure1PluginTest {
                 .isEmpty();
     }
 
+    /**
+     * Verifies resolving suite title if exists for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldGetSuiteTitleIfExists() throws Exception {
         Set<TestResult> testCases = process(
@@ -183,6 +236,10 @@ class Allure1PluginTest {
                 .containsExactly("Passing test");
     }
 
+    /**
+     * Verifies suite label fallback when an Allure 1 suite title is missing.
+     */
+    @Description
     @Test
     void shouldNotFailIfSuiteTitleNotExists() throws Exception {
         Set<TestResult> testCases = process(
@@ -196,6 +253,10 @@ class Allure1PluginTest {
                 .containsExactly("my.company.AlwaysPassingTest");
     }
 
+    /**
+     * Verifies copying labels from suite for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldCopyLabelsFromSuite() throws Exception {
         Set<TestResult> testCases = process(
@@ -210,6 +271,10 @@ class Allure1PluginTest {
                 .containsExactlyInAnyOrder("SuccessStory", "OtherStory");
     }
 
+    /**
+     * Verifies deriving the flaky flag from an Allure 1 label.
+     */
+    @Description
     @Test
     void shouldSetFlakyFromLabel() throws Exception {
         Set<TestResult> testCases = process(
@@ -221,6 +286,10 @@ class Allure1PluginTest {
                 .containsExactly(true);
     }
 
+    /**
+     * Verifies deriving the package from the Allure 1 test class label.
+     */
+    @Description
     @Test
     void shouldUseTestClassLabelForPackage() throws Exception {
         Set<TestResult> testResults = process(
@@ -233,6 +302,10 @@ class Allure1PluginTest {
                 .containsExactly("my.company.package.subpackage.MyClass");
     }
 
+    /**
+     * Verifies deriving the full name from the Allure 1 test class label.
+     */
+    @Description
     @Test
     void shouldUseTestClassLabelForFullName() throws Exception {
         Set<TestResult> testResults = process(
@@ -245,6 +318,10 @@ class Allure1PluginTest {
                 .containsExactly("my.company.package.subpackage.MyClass.testThree");
     }
 
+    /**
+     * Verifies adding the test result format label for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldAddTestResultFormatLabel() throws Exception {
         Set<TestResult> testResults = process(
@@ -257,20 +334,48 @@ class Allure1PluginTest {
                 .containsOnly(Allure1Plugin.ALLURE1_RESULTS_FORMAT);
     }
 
+    /**
+     * Verifies generating separate parameter and retry hashes for parameterized Allure 1 tests.
+     */
+    @Description
     @Test
-    void shouldGenerateDifferentHistoryIdForParameterizedTests() throws Exception {
-        final String historyId1 = "56f15d234f8ad63b493afb25f7c26556";
-        final String historyId2 = "e374f6eb3cf497543291506c8c20353";
+    void shouldGenerateDifferentRetryHashesForParameterizedTests() throws Exception {
         Set<TestResult> testResults = process(
                 "allure1/suite-with-parameters.xml", generateTestSuiteXmlName()
         ).getResults();
 
         assertThat(testResults)
-                .extracting(TestResult::getHistoryId)
-                .as("History ids for parameterized tests must be different")
-                .containsExactlyInAnyOrder(historyId1, historyId2);
+                .extracting(
+                        TestResult::getTestCaseHash,
+                        TestResult::getParametersHash,
+                        TestResult::getRetryHash
+                )
+                .as("Retry hashes for parameterized tests must be different")
+                .containsExactlyInAnyOrder(
+                        Tuple.tuple(
+                                "59143445e8de68070640560c106299fe",
+                                "7d4ecec621d4160a846418baa497c967",
+                                "59143445e8de68070640560c106299fe.7d4ecec621d4160a846418baa497c967"
+                        ),
+                        Tuple.tuple(
+                                "59143445e8de68070640560c106299fe",
+                                "87749f11750f15b79e8b18a921eec986",
+                                "59143445e8de68070640560c106299fe.87749f11750f15b79e8b18a921eec986"
+                        )
+                );
+        assertThat(testResults)
+                .extracting(TestResult::getLegacyHistoryId)
+                .as("Legacy history ids for parameterized tests must remain compatible")
+                .containsExactlyInAnyOrder(
+                        "56f15d234f8ad63b493afb25f7c26556",
+                        "e374f6eb3cf497543291506c8c20353"
+                );
     }
 
+    /**
+     * Verifies reading properties file for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldReadPropertiesFile() throws Exception {
         final String testName = "testFour";
@@ -290,6 +395,10 @@ class Allure1PluginTest {
                 .containsExactlyInAnyOrder(link1, link2, link3);
     }
 
+    /**
+     * Verifies processing null parameters for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldProcessNullParameters() throws Exception {
         final Set<TestResult> results = process(
@@ -309,23 +418,41 @@ class Allure1PluginTest {
                 );
     }
 
+    /**
+     * Verifies legacy Allure 1 history-id labels are preserved without overriding generated retry hashes.
+     */
+    @Description
     @Test
-    void shouldBeAbleToSpecifyHistoryIdViaLabel() throws Exception {
+    void shouldIgnoreHistoryIdLabel() throws Exception {
         final Set<TestResult> results = process(
                 "allure1/history-id-label.xml", generateTestSuiteXmlName()
         ).getResults();
 
         assertThat(results)
                 .filteredOn("name", "test1")
-                .extracting(TestResult::getHistoryId)
-                .containsExactly("something");
+                .extracting(TestResult::getRetryHash, TestResult::getLegacyHistoryId)
+                .containsExactly(
+                        Tuple.tuple(
+                                "47c78c8a5a1548bc8e800a8f2e7caeb8.d41d8cd98f00b204e9800998ecf8427e",
+                                "something"
+                        )
+                );
 
         assertThat(results)
                 .filteredOn("name", "test2")
-                .extracting(TestResult::getHistoryId)
-                .containsNull();
+                .extracting(TestResult::getRetryHash, TestResult::getLegacyHistoryId)
+                .containsExactly(
+                        Tuple.tuple(
+                                "2b562de6055b47e72bac4c19bc9b7ec4.d41d8cd98f00b204e9800998ecf8427e",
+                                null
+                        )
+                );
     }
 
+    /**
+     * Verifies processing empty lists for Allure 1 parsing.
+     */
+    @Description
     @Issue("629")
     @Test
     void shouldProcessEmptyLists() throws Exception {
@@ -337,6 +464,10 @@ class Allure1PluginTest {
                 .hasSize(1);
     }
 
+    /**
+     * Verifies preserving content type from attachment for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldPreserveContentTypeFromAttachment() throws IOException {
         final LaunchResults results = process(
@@ -358,6 +489,10 @@ class Allure1PluginTest {
         assertThat(attachments.get(0).getSource()).endsWith(".txt");
     }
 
+    /**
+     * Verifies resolving attachments with relative results path for Allure 1 parsing.
+     */
+    @Description
     @Test
     void shouldResolveAttachmentsWithRelativeResultsPath() throws IOException {
         final Path allureResults = directory.resolve("allure-results");
@@ -367,10 +502,8 @@ class Allure1PluginTest {
         copyFile(allureResults, "allure1/sample-attachment.txt", "link.txt");
         final Allure1Plugin reader = new Allure1Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
         final Path relative = allureResults.resolve("..").resolve("allure-results");
-        reader.readResults(configuration, resultsVisitor, relative);
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, relative);
 
         assertThat(results.getResults())
                 .hasSize(1);
@@ -386,12 +519,14 @@ class Allure1PluginTest {
         assertThat(attachments.get(0).getSource()).endsWith(".txt");
     }
 
-
+    /**
+     * Verifies reading environment properties UTF-8 for Allure 1 parsing.
+     */
+    @Description
     @SuppressWarnings("unchecked")
     @Test
     void shouldReadEnvironmentPropertiesUtf8() throws Exception {
-        writeBytes(
-                "test_executor=测试人员 A\n".getBytes(StandardCharsets.UTF_8));
+        writeBytes("test_executor=测试人员 A\n".getBytes(StandardCharsets.UTF_8));
 
         final LaunchResults launchResults = process();
         final Map<String, String> env = launchResults.getExtra(
@@ -402,10 +537,14 @@ class Allure1PluginTest {
         assertThat(env).containsEntry("test_executor", "测试人员 A");
     }
 
+    /**
+     * Verifies reading environment properties UTF-8 with BOM for Allure 1 parsing.
+     */
+    @Description
     @SuppressWarnings("unchecked")
     @Test
     void shouldReadEnvironmentPropertiesUtf8WithBom() throws Exception {
-        final byte[] bom = new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+        final byte[] bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
         final byte[] content = "executor=测试人员 A\n".getBytes(StandardCharsets.UTF_8);
         final byte[] bytes = new byte[bom.length + content.length];
         System.arraycopy(bom, 0, bytes, 0, bom.length);
@@ -419,15 +558,20 @@ class Allure1PluginTest {
                 (Supplier<Map<String, String>>) LinkedHashMap::new
         );
 
-                assertThat(env).containsEntry("executor", "测试人员 A");
-                assertThat(env).doesNotContainKey("\uFEFFexecutor");
+        assertThat(env).containsEntry("executor", "测试人员 A");
+        assertThat(env).doesNotContainKey("\uFEFFexecutor");
     }
 
+    /**
+     * Verifies falling back to ISO-8859-1 when UTF-8 environment decoding fails.
+     */
+    @Description
     @SuppressWarnings("unchecked")
     @Test
     void shouldFallbackToIso88591WhenUtf8DecodingFails() throws Exception {
         writeBytes(
-                "name=café\n".getBytes(StandardCharsets.ISO_8859_1));
+                "name=café\n".getBytes(StandardCharsets.ISO_8859_1)
+        );
 
         final LaunchResults launchResults = process();
         final Map<String, String> env = launchResults.getExtra(
@@ -438,6 +582,10 @@ class Allure1PluginTest {
         assertThat(env).containsEntry("name", "café");
     }
 
+    /**
+     * Verifies rejecting attachment sources with invalid characters.
+     */
+    @Description
     @Test
     void shouldNotAllowInvalidCharactersInAttachmentSource() throws IOException {
         final LaunchResults results = process(
@@ -450,6 +598,10 @@ class Allure1PluginTest {
 
     }
 
+    /**
+     * Verifies rejecting attachment source path traversal attempts.
+     */
+    @Description
     @Test
     void shouldNotAllowAttachmentSourcePathTraversal() throws IOException {
         final Path allureResultsDir = directory.resolve("allure-results");
@@ -460,16 +612,17 @@ class Allure1PluginTest {
 
         final Allure1Plugin reader = new Allure1Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, allureResultsDir);
-
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, allureResultsDir);
 
         assertThat(results.getAttachments())
                 .isEmpty();
 
     }
 
+    /**
+     * Verifies rejecting attachment sources that resolve through symbolic links.
+     */
+    @Description
     @Test
     void shouldNotAllowAttachmentSourceSymbolicLink() throws IOException {
         final Path allureResultsDir = directory.resolve("allure-results");
@@ -482,10 +635,7 @@ class Allure1PluginTest {
 
         final Allure1Plugin reader = new Allure1Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, allureResultsDir);
-
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, allureResultsDir);
 
         assertThat(results.getAttachments())
                 .isEmpty();
@@ -493,29 +643,61 @@ class Allure1PluginTest {
     }
 
     private LaunchResults process(String... strings) throws IOException {
-        Iterator<String> iterator = Arrays.asList(strings).iterator();
-        while (iterator.hasNext()) {
-            String first = iterator.next();
-            String second = iterator.next();
-            copyFile(directory, first, second);
-        }
-        Allure1Plugin reader = new Allure1Plugin();
-        final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, directory);
-        return resultsVisitor.getLaunchResults();
+        return Allure.step(
+                "Read Allure 1 launch from " + strings.length / 2 + " fixture file(s)",
+                () -> {
+                    Iterator<String> iterator = Arrays.asList(strings).iterator();
+                    while (iterator.hasNext()) {
+                        String first = iterator.next();
+                        String second = iterator.next();
+                        copyFile(directory, first, second);
+                    }
+                    final Allure1Plugin reader = new Allure1Plugin();
+                    final Configuration configuration = ConfigurationBuilder.bundled().build();
+                    return readResults(reader, configuration, directory);
+                }
+        );
     }
 
     private void writeBytes(final byte[] bytes) throws IOException {
-        Files.write(directory.resolve("environment.properties"), bytes);
+        Allure.step("Write environment.properties with " + bytes.length + " byte(s)", () -> {
+            final Path output = directory.resolve("environment.properties");
+            Files.write(output, bytes);
+            Allure.addAttachment("environment.properties", TEXT_PLAIN, describeEnvironmentProperties(bytes));
+        });
     }
 
     private void copyFile(Path dir, String resourceName, String fileName) throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
-            Files.copy(
-                    Objects.requireNonNull(is, "resource " + resourceName + " not found"),
-                    dir.resolve(fileName)
-            );
-        }
+        Allure.step("Copy fixture " + resourceName + " as " + fileName, () -> {
+            final Path output = dir.resolve(fileName);
+            final byte[] content;
+            try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
+                content = Objects.requireNonNull(is, "resource " + resourceName + " not found").readAllBytes();
+                Files.write(output, content);
+            }
+            attachFileContent(fileName, content);
+        });
+    }
+
+    private LaunchResults readResults(
+                                      final Allure1Plugin reader,
+                                      final Configuration configuration,
+                                      final Path resultsDirectory) {
+        return Allure.step("Parse Allure 1 results from " + resultsDirectory, () -> {
+            final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
+            reader.readResults(configuration, resultsVisitor, resultsDirectory);
+            final LaunchResults results = resultsVisitor.getLaunchResults();
+            attachLaunchResults("Attach parsed Allure 1 launch artifacts", results);
+            return results;
+        });
+    }
+
+    private String describeEnvironmentProperties(final byte[] bytes) {
+        return String.format(
+                "utf8=%s%niso88591=%s%nhex=%s%n",
+                new String(bytes, StandardCharsets.UTF_8),
+                new String(bytes, StandardCharsets.ISO_8859_1),
+                toHex(bytes)
+        );
     }
 }

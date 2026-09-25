@@ -37,6 +37,7 @@ import io.qameta.allure.tree.Tree;
 import io.qameta.allure.tree.TreeLayer;
 import io.qameta.allure.tree.TreeWidgetData;
 import io.qameta.allure.tree.TreeWidgetItem;
+import io.qameta.allure.util.HtmlSanitizerUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,7 +64,6 @@ import static java.util.Objects.nonNull;
  *
  * @since 2.0
  */
-@SuppressWarnings({"ClassDataAbstractionCoupling"})
 public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
 
     public static final String CATEGORIES = "categories";
@@ -76,16 +76,16 @@ public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
 
     public static final String CSV_FILE_NAME = "categories.csv";
 
-    //@formatter:off
-    private static final TypeReference<List<Category>> CATEGORIES_TYPE =
-        new TypeReference<List<Category>>() { };
-    //@formatter:on
+    private static final TypeReference<List<Category>> CATEGORIES_TYPE = new TypeReference<List<Category>>() {
+    };
 
     public CategoriesPlugin() {
-        super(Arrays.asList(
-                new EnrichDataAggregator(), new JsonAggregator(),
-                new CsvExportAggregator(), new WidgetAggregator()
-        ));
+        super(
+                Arrays.asList(
+                        new EnrichDataAggregator(), new JsonAggregator(),
+                        new CsvExportAggregator(), new WidgetAggregator()
+                )
+        );
     }
 
     @Override
@@ -97,6 +97,9 @@ public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
         if (Files.exists(categoriesFile)) {
             try (InputStream is = Files.newInputStream(categoriesFile)) {
                 final List<Category> categories = context.getValue().readValue(is, CATEGORIES_TYPE);
+                categories.forEach(
+                        category -> category.setDescriptionHtml(HtmlSanitizerUtils.sanitizeHtml(category.getDescriptionHtml()))
+                );
                 visitor.visitExtra(CATEGORIES, categories);
             } catch (IOException e) {
                 visitor.error("Could not read categories file " + categoriesFile, e);
@@ -106,9 +109,7 @@ public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
 
     /* default */ static Tree<TestResult> getData(final List<LaunchResults> launchResults) {
 
-        // @formatter:off
         final Tree<TestResult> categories = new TestResultTree(CATEGORIES, CategoriesPlugin::groupByCategories);
-        // @formatter:on
 
         launchResults.stream()
                 .map(LaunchResults::getResults)
@@ -123,19 +124,24 @@ public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
             final List<Category> categories = launch.getExtra(CATEGORIES, Collections::emptyList);
             launch.getResults().forEach(result -> {
                 final List<Category> resultCategories = result.getExtraBlock(CATEGORIES, new ArrayList<>());
-                categories.forEach(category -> {
-                    if (matches(result, category)) {
-                        resultCategories.add(category);
-                    }
-                });
-                if (resultCategories.isEmpty() && Status.FAILED.equals(result.getStatus())) {
-                    result.getExtraBlock(CATEGORIES, new ArrayList<Category>()).add(FAILED_TESTS);
-                }
-                if (resultCategories.isEmpty() && Status.BROKEN.equals(result.getStatus())) {
-                    result.getExtraBlock(CATEGORIES, new ArrayList<Category>()).add(BROKEN_TESTS);
+                categories.stream()
+                        .filter(category -> matches(result, category))
+                        .findFirst()
+                        .ifPresent(resultCategories::add);
+                if (resultCategories.isEmpty()) {
+                    addDefaultCategory(result, resultCategories);
                 }
             });
         });
+    }
+
+    private static void addDefaultCategory(final TestResult result, final List<Category> categories) {
+        if (Status.FAILED.equals(result.getStatus())) {
+            categories.add(FAILED_TESTS);
+        }
+        if (Status.BROKEN.equals(result.getStatus())) {
+            categories.add(BROKEN_TESTS);
+        }
     }
 
     protected static List<TreeLayer> groupByCategories(final TestResult testResult) {
@@ -153,21 +159,20 @@ public class CategoriesPlugin extends CompositeAggregator2 implements Reader {
         return input == null ? null : input.replaceAll("\u001B\\[[0-9;]*[a-zA-Z]", "");
     }
 
-    @SuppressWarnings({"PMD.NPathComplexity", "CyclomaticComplexity"})
     public static boolean matches(final TestResult result, final Category category) {
         final String cleanMessage = stripAnsi(result.getStatusMessage());
         final String cleanTrace = stripAnsi(result.getStatusTrace());
         final boolean matchesStatus = category.getMatchedStatuses().isEmpty()
-                                      || nonNull(result.getStatus())
-                                         && category.getMatchedStatuses().contains(result.getStatus());
+                || nonNull(result.getStatus())
+                        && category.getMatchedStatuses().contains(result.getStatus());
         final boolean matchesMessage = isNull(category.getMessageRegex())
-                                       || nonNull(cleanMessage)
-                                          && matches(cleanMessage, category.getMessageRegex());
+                || nonNull(cleanMessage)
+                        && matches(cleanMessage, category.getMessageRegex());
         final boolean matchesTrace = isNull(category.getTraceRegex())
-                                     || nonNull(cleanTrace)
-                                        && matches(cleanTrace, category.getTraceRegex());
+                || nonNull(cleanTrace)
+                        && matches(cleanTrace, category.getTraceRegex());
         final boolean matchesFlaky = isNull(category.getFlaky())
-                                     || result.isFlaky() == category.getFlaky();
+                || result.isFlaky() == category.getFlaky();
         return matchesStatus && matchesMessage && matchesTrace && matchesFlaky;
     }
 

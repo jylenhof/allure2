@@ -28,7 +28,7 @@ import java.util.Objects;
  *
  * @author charlie (Dmitry Baev).
  */
-@SuppressWarnings("all")
+@SuppressWarnings("MultipleStringLiterals")
 public final class WellKnownFileExtensionsUtils {
 
     public static final Map<String, String> EXT_TO_MIME_TYPE;
@@ -52,6 +52,8 @@ public final class WellKnownFileExtensionsUtils {
         m.put("webm", "video/webm");
         m.put("tar", "application/x-tar");
         m.put("gtar", "application/x-gtar");
+        m.put("imagediff", "application/vnd.allure.image.diff");
+        m.put("httpexchange", "application/vnd.allure.http+json");
         m.put("urls", "text/uri-list");
         m.put("ogv", "video/ogg");
         m.put("tsv", "text/tab-separated-values");
@@ -1354,6 +1356,7 @@ public final class WellKnownFileExtensionsUtils {
         for (Map.Entry<String, String> stringStringEntry : EXT_TO_MIME_TYPE.entrySet()) {
             extToMimeType.putIfAbsent(stringStringEntry.getValue(), stringStringEntry.getKey());
         }
+        extToMimeType.put("application/vnd.allure.http", "httpexchange");
         MIME_TYPE_TO_EXT = Collections.unmodifiableMap(extToMimeType);
     }
 

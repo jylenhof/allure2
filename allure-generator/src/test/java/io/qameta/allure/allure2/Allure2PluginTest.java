@@ -15,11 +15,14 @@
  */
 package io.qameta.allure.allure2;
 
+import io.qameta.allure.Allure;
 import io.qameta.allure.ConfigurationBuilder;
 import io.qameta.allure.DefaultResultsVisitor;
+import io.qameta.allure.Description;
 import io.qameta.allure.core.Configuration;
 import io.qameta.allure.core.LaunchResults;
 import io.qameta.allure.entity.Attachment;
+import io.qameta.allure.entity.GlobalError;
 import io.qameta.allure.entity.LabelName;
 import io.qameta.allure.entity.Parameter;
 import io.qameta.allure.entity.StageResult;
@@ -31,17 +34,22 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static io.qameta.allure.entity.Status.UNKNOWN;
+import static io.qameta.allure.testdata.TestData.attachFileContent;
+import static io.qameta.allure.testdata.TestData.attachLaunchResults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
@@ -54,6 +62,10 @@ class Allure2PluginTest {
         this.directory = directory;
     }
 
+    /**
+     * Verifies reading befores from groups for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldReadBeforesFromGroups() throws Exception {
         Set<TestResult> testResults = process(
@@ -70,6 +82,10 @@ class Allure2PluginTest {
                 .containsExactlyInAnyOrder("mockAuthorization", "loadTestConfiguration");
     }
 
+    /**
+     * Verifies reading afters from groups for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldReadAftersFromGroups() throws Exception {
         Set<TestResult> testResults = process(
@@ -86,6 +102,10 @@ class Allure2PluginTest {
                 .containsExactlyInAnyOrder("unloadTestConfiguration", "cleanUpContext");
     }
 
+    /**
+     * Verifies excluding duplicated parameters for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldExcludeDuplicatedParams() throws Exception {
         Set<TestResult> testResults = process(
@@ -103,6 +123,10 @@ class Allure2PluginTest {
                 );
     }
 
+    /**
+     * Verifies picking up attachments for test case for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldPickUpAttachmentsForTestCase() throws IOException {
         Set<TestResult> testResults = process(
@@ -126,6 +150,10 @@ class Allure2PluginTest {
                 .containsExactly("String attachment in test");
     }
 
+    /**
+     * Verifies picking up attachments for afters for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldPickUpAttachmentsForAfters() throws IOException {
         Set<TestResult> testResults = process(
@@ -149,6 +177,93 @@ class Allure2PluginTest {
                 .containsExactly("String attachment in after");
     }
 
+    /**
+     * Verifies ignoring unfinished Allure 2 result and container files.
+     */
+    @Description
+    @Test
+    void shouldIgnoreTemporaryResultAndContainerFiles() throws IOException {
+        final LaunchResults results = process(
+                "allure2/other-testcase.json", generateTestResultName(),
+                "allure2/flaky.json", generateTestResultName() + ".tmp",
+                "allure2/first-testgroup.json", generateTestResultContainerName() + ".tmp"
+        );
+
+        assertThat(results.getResults())
+                .singleElement()
+                .satisfies(result -> {
+                    assertThat(result.getName()).isEqualTo("shouldCreate");
+                    assertThat(result.getBeforeStages()).isEmpty();
+                    assertThat(result.getAfterStages()).isEmpty();
+                });
+    }
+
+    /**
+     * Verifies keeping links to unfinished Allure 2 attachments unresolved.
+     */
+    @Description
+    @Test
+    void shouldTreatTemporaryAttachmentFilesAsMissing() throws IOException {
+        final LaunchResults results = process(
+                "allure2/temporary-attachment.json", generateTestResultName(),
+                "allure2/test-sample-attachment.txt", ".allure-write-attachment.tmp"
+        );
+
+        assertThat(results.getResults())
+                .singleElement()
+                .satisfies(result -> {
+                    final StageResult stage = result.getTestStage();
+                    assertThat(stage).isNotNull();
+                    assertThat(stage.getAttachments())
+                            .extracting(
+                                    Attachment::getName,
+                                    Attachment::getType,
+                                    Attachment::getSource,
+                                    Attachment::getSize
+                            )
+                            .containsExactly(tuple("Unfinished attachment", "text/plain", null, 0L));
+                });
+        assertThat(results.getAttachments()).isEmpty();
+    }
+
+    /**
+     * Verifies treating attachment sources that resolve to a filesystem root as missing.
+     */
+    @Description
+    @Test
+    void shouldTreatRootAttachmentSourceAsMissing() throws IOException {
+        final Path archive = directory.resolve("results.zip");
+        try (FileSystem fileSystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
+            final Path resultsDirectory = fileSystem.getPath("/allure-results");
+            Files.createDirectory(resultsDirectory);
+            copyFile(resultsDirectory, "allure2/root-attachment-source.json", generateTestResultName());
+
+            final Allure2Plugin reader = new Allure2Plugin();
+            final Configuration configuration = ConfigurationBuilder.bundled().build();
+            final LaunchResults results = readResults(reader, configuration, resultsDirectory);
+
+            assertThat(results.getResults())
+                    .singleElement()
+                    .satisfies(result -> {
+                        final StageResult stage = result.getTestStage();
+                        assertThat(stage).isNotNull();
+                        assertThat(stage.getAttachments())
+                                .extracting(
+                                        Attachment::getName,
+                                        Attachment::getType,
+                                        Attachment::getSource,
+                                        Attachment::getSize
+                                )
+                                .containsExactly(tuple("Root attachment", "text/plain", null, 0L));
+                    });
+            assertThat(results.getAttachments()).isEmpty();
+        }
+    }
+
+    /**
+     * Verifies that group attachments are not overwritten for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldDoNotOverrideAttachmentsForGroups() throws IOException {
         Set<TestResult> testResults = process(
@@ -162,15 +277,21 @@ class Allure2PluginTest {
                 .describedAs("Test cases is not found")
                 .hasSize(2);
 
-        testResults.forEach(testResult -> assertThat(testResult.getAfterStages())
-                .hasSize(1)
-                .flatExtracting(StageResult::getAttachments)
-                .hasSize(1)
-                .extracting(Attachment::getName)
-                .containsExactly("String attachment in after"));
+        testResults.forEach(
+                testResult -> assertThat(testResult.getAfterStages())
+                        .hasSize(1)
+                        .flatExtracting(StageResult::getAttachments)
+                        .hasSize(1)
+                        .extracting(Attachment::getName)
+                        .containsExactly("String attachment in after")
+        );
 
     }
 
+    /**
+     * Verifies processing empty status for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessEmptyStatus() throws Exception {
         Set<TestResult> testResults = process(
@@ -183,6 +304,10 @@ class Allure2PluginTest {
                 .containsExactly(UNKNOWN);
     }
 
+    /**
+     * Verifies processing null status for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessNullStatus() throws Exception {
         Set<TestResult> testResults = process(
@@ -195,6 +320,10 @@ class Allure2PluginTest {
                 .containsExactly(UNKNOWN);
     }
 
+    /**
+     * Verifies processing invalid status for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessInvalidStatus() throws Exception {
         Set<TestResult> testResults = process(
@@ -207,6 +336,10 @@ class Allure2PluginTest {
                 .containsExactly(UNKNOWN);
     }
 
+    /**
+     * Verifies processing null stage time for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessNullStageTime() throws Exception {
         Set<TestResult> testResults = process(
@@ -218,6 +351,10 @@ class Allure2PluginTest {
                 .hasSize(1);
     }
 
+    /**
+     * Verifies adding the test result format label for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldAddTestResultFormatLabel() throws Exception {
         Set<TestResult> testResults = process(
@@ -232,6 +369,10 @@ class Allure2PluginTest {
                 .containsOnly(Allure2Plugin.ALLURE2_RESULTS_FORMAT);
     }
 
+    /**
+     * Verifies processing parameters for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessParameters() throws Exception {
         Set<TestResult> testResults = process(
@@ -251,6 +392,37 @@ class Allure2PluginTest {
                 );
     }
 
+    /**
+     * Verifies calculating canonical hashes while preserving the adapter-provided history ID for fallback.
+     */
+    @Description
+    @Test
+    void shouldCalculateIdentityHashes() throws Exception {
+        Set<TestResult> testResults = process(
+                "allure2/parameters.json", generateTestResultName()
+        ).getResults();
+
+        assertThat(testResults)
+                .extracting(
+                        TestResult::getTestCaseHash,
+                        TestResult::getParametersHash,
+                        TestResult::getRetryHash,
+                        TestResult::getLegacyHistoryId
+                )
+                .containsExactly(
+                        tuple(
+                                "fa121e5badc3c93651d3921a7898a04c",
+                                "9030faa44fb9da8aeaee27f28c29a4f9",
+                                "fa121e5badc3c93651d3921a7898a04c.9030faa44fb9da8aeaee27f28c29a4f9",
+                                "adapter-provided-history-id"
+                        )
+                );
+    }
+
+    /**
+     * Verifies processing step parameters for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldProcessStepParameters() throws Exception {
         Set<TestResult> testResults = process(
@@ -272,6 +444,10 @@ class Allure2PluginTest {
                 );
     }
 
+    /**
+     * Verifies ordering fixtures by start date for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldOrderFixturesByStartDate() throws Exception {
         Set<TestResult> testResults = process(
@@ -303,6 +479,10 @@ class Allure2PluginTest {
                 );
     }
 
+    /**
+     * Verifies deriving the flaky flag from Allure 2 result data.
+     */
+    @Description
     @Test
     void shouldSetFlakyFromResults() throws IOException {
         final LaunchResults results = process(
@@ -320,6 +500,53 @@ class Allure2PluginTest {
                 );
     }
 
+    /**
+     * Verifies sanitizing description HTML for Allure 2 parsing.
+     */
+    @Description
+    @Test
+    void shouldSanitizeDescriptionHtml() throws Exception {
+        final LaunchResults results = process(
+                "allure2/description-html-xss.json", generateTestResultName()
+        );
+
+        assertThat(results.getResults())
+                .hasSize(1);
+
+        final TestResult testResult = results.getResults().iterator().next();
+        final String descriptionHtml = testResult.getDescriptionHtml();
+        assertThat(descriptionHtml)
+                .contains("<p>safe</p>")
+                .doesNotContain("<img")
+                .doesNotContain("onerror")
+                .doesNotContain("javascript:");
+    }
+
+    /**
+     * Verifies script tags are stripped from Allure 2 HTML descriptions.
+     */
+    @Description
+    @Test
+    void shouldStripScriptTagsFromDescriptionHtml() throws Exception {
+        final LaunchResults results = process(
+                "allure2/description-html-script-xss.json", generateTestResultName()
+        );
+
+        assertThat(results.getResults())
+                .hasSize(1);
+
+        final TestResult testResult = results.getResults().iterator().next();
+        final String descriptionHtml = testResult.getDescriptionHtml();
+        assertThat(descriptionHtml)
+                .contains("<p>safe</p>")
+                .doesNotContain("<script")
+                .doesNotContain("alert(");
+    }
+
+    /**
+     * Verifies preserving content type from attachment for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldPreserveContentTypeFromAttachment() throws IOException {
         final LaunchResults results = process(
@@ -341,6 +568,73 @@ class Allure2PluginTest {
         assertThat(attachments.get(0).getSource()).endsWith(".txt");
     }
 
+    /**
+     * Verifies reading run-level errors and attachments without creating a phantom test result.
+     */
+    @Description
+    @Test
+    void shouldReadGlobalErrorsAndAttachmentsWithoutTestResults() throws IOException {
+        final LaunchResults results = process(
+                "allure2/globals.json", UUID.randomUUID() + "-globals.json",
+                "allure2/launch.log", "launch.log"
+        );
+
+        assertThat(results.getResults()).isEmpty();
+        assertThat(results.getGlobalErrors())
+                .extracting(
+                        GlobalError::getTimestamp,
+                        GlobalError::getMessage,
+                        GlobalError::getTrace,
+                        GlobalError::getActual,
+                        GlobalError::getExpected
+                )
+                .containsExactly(
+                        tuple(
+                                1724662800000L,
+                                "Container DatabaseTests failed, tests inside it did not run",
+                                "java.lang.IllegalStateException: database is unavailable\n"
+                                        + "\tat example.DatabaseFixture.beforeAll(DatabaseFixture.java:42)",
+                                "database unavailable",
+                                "database ready"
+                        )
+                );
+        assertThat(results.getGlobalAttachments())
+                .singleElement()
+                .satisfies(attachment -> {
+                    assertThat(attachment.getTimestamp()).isEqualTo(1724662800500L);
+                    assertThat(attachment.getName()).isEqualTo("Launch log");
+                    assertThat(attachment.getType()).isEqualTo("text/plain");
+                    assertThat(attachment.getSource()).endsWith(".txt");
+                    assertThat(attachment.getSize()).isPositive();
+                });
+        assertThat(results.getAttachments())
+                .hasSize(1)
+                .allSatisfy((path, attachment) -> {
+                    assertThat(path.getFileName()).hasToString("launch.log");
+                    assertThat(attachment.getSource()).endsWith(".txt");
+                });
+    }
+
+    /**
+     * Verifies omitting global attachment metadata when its content is missing.
+     */
+    @Description
+    @Test
+    void shouldOmitGlobalAttachmentWhenContentIsMissing() throws IOException {
+        final LaunchResults results = process(
+                "allure2/globals.json", UUID.randomUUID() + "-globals.json"
+        );
+
+        assertThat(results.getResults()).isEmpty();
+        assertThat(results.getGlobalErrors()).hasSize(1);
+        assertThat(results.getGlobalAttachments()).isEmpty();
+        assertThat(results.getAttachments()).isEmpty();
+    }
+
+    /**
+     * Verifies rejecting attachment sources with invalid characters.
+     */
+    @Description
     @Test
     void shouldNotAllowInvalidCharactersInAttachmentSource() throws IOException {
         final LaunchResults results = process(
@@ -353,6 +647,10 @@ class Allure2PluginTest {
 
     }
 
+    /**
+     * Verifies rejecting attachment source path traversal attempts.
+     */
+    @Description
     @Test
     void shouldNotAllowAttachmentSourcePathTraversal() throws IOException {
         final Path allureResultsDir = directory.resolve("allure-results");
@@ -363,16 +661,17 @@ class Allure2PluginTest {
 
         final Allure2Plugin reader = new Allure2Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, allureResultsDir);
-
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, allureResultsDir);
 
         assertThat(results.getAttachments())
                 .isEmpty();
 
     }
 
+    /**
+     * Verifies rejecting attachment sources that resolve through symbolic links.
+     */
+    @Description
     @Test
     void shouldNotAllowAttachmentSourceSymbolicLink() throws IOException {
         final Path allureResultsDir = directory.resolve("allure-results");
@@ -385,16 +684,17 @@ class Allure2PluginTest {
 
         final Allure2Plugin reader = new Allure2Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, allureResultsDir);
-
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, allureResultsDir);
 
         assertThat(results.getAttachments())
                 .isEmpty();
 
     }
 
+    /**
+     * Verifies resolving attachments with relative results path for Allure 2 parsing.
+     */
+    @Description
     @Test
     void shouldResolveAttachmentsWithRelativeResultsPath() throws IOException {
         final Path allureResults = directory.resolve("allure-results");
@@ -404,10 +704,8 @@ class Allure2PluginTest {
 
         final Allure2Plugin reader = new Allure2Plugin();
         final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
         final Path relative = allureResults.resolve("..").resolve("allure-results");
-        reader.readResults(configuration, resultsVisitor, relative);
-        final LaunchResults results = resultsVisitor.getLaunchResults();
+        final LaunchResults results = readResults(reader, configuration, relative);
 
         assertThat(results.getResults())
                 .hasSize(1);
@@ -424,23 +722,45 @@ class Allure2PluginTest {
     }
 
     private LaunchResults process(String... strings) throws IOException {
-        Iterator<String> iterator = Arrays.asList(strings).iterator();
-        while (iterator.hasNext()) {
-            String first = iterator.next();
-            String second = iterator.next();
-            copyFile(directory, first, second);
-        }
-        Allure2Plugin reader = new Allure2Plugin();
-        final Configuration configuration = ConfigurationBuilder.bundled().build();
-        final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
-        reader.readResults(configuration, resultsVisitor, directory);
-        return resultsVisitor.getLaunchResults();
+        return Allure.step(
+                "Read Allure 2 launch from " + strings.length / 2 + " fixture file(s)",
+                () -> {
+                    Iterator<String> iterator = Arrays.asList(strings).iterator();
+                    while (iterator.hasNext()) {
+                        String first = iterator.next();
+                        String second = iterator.next();
+                        copyFile(directory, first, second);
+                    }
+                    final Allure2Plugin reader = new Allure2Plugin();
+                    final Configuration configuration = ConfigurationBuilder.bundled().build();
+                    return readResults(reader, configuration, directory);
+                }
+        );
     }
 
     private void copyFile(Path dir, String resourceName, String fileName) throws IOException {
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
-            Files.copy(Objects.requireNonNull(is), dir.resolve(fileName));
-        }
+        Allure.step("Copy fixture " + resourceName + " as " + fileName, () -> {
+            final Path output = dir.resolve(fileName);
+            final byte[] content;
+            try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourceName)) {
+                content = Objects.requireNonNull(is).readAllBytes();
+                Files.write(output, content);
+            }
+            attachFileContent(fileName, content);
+        });
+    }
+
+    private LaunchResults readResults(
+                                      final Allure2Plugin reader,
+                                      final Configuration configuration,
+                                      final Path resultsDirectory) {
+        return Allure.step("Parse Allure 2 results from " + resultsDirectory, () -> {
+            final DefaultResultsVisitor resultsVisitor = new DefaultResultsVisitor(configuration);
+            reader.readResults(configuration, resultsVisitor, resultsDirectory);
+            final LaunchResults results = resultsVisitor.getLaunchResults();
+            attachLaunchResults("Attach parsed Allure 2 launch artifacts", results);
+            return results;
+        });
     }
 
     private static String generateTestResultName() {
